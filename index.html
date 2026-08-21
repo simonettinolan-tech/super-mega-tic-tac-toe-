@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SUPER MEGA TIC TAC TOE</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  min-height:100vh;font-family:Arial,sans-serif;color:white;
+  display:flex;justify-content:center;align-items:center;overflow-x:hidden;
+  background:radial-gradient(circle at 20% 10%,#5336a8,transparent 30%),
+             radial-gradient(circle at 80% 90%,#a82c78,transparent 30%),
+             linear-gradient(135deg,#050510,#11112d,#080816);
+}
+.game{
+  width:94%;max-width:560px;margin:20px;padding:24px;text-align:center;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);
+  border-radius:28px;box-shadow:0 25px 70px rgba(0,0,0,.6);
+  backdrop-filter:blur(15px);
+}
+.logo{width:min(90%,430px);max-height:220px;object-fit:contain;margin:0 auto 8px;display:block;
+      filter:drop-shadow(0 8px 18px rgba(0,0,0,.45))}
+.subtitle{color:#bdbde0;margin-bottom:18px;font-weight:bold}
+.modes,.buttons{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+button{font:inherit}
+.mode,.control{
+  border:0;border-radius:13px;padding:11px 16px;color:white;font-weight:bold;
+  background:rgba(255,255,255,.09);cursor:pointer;transition:.2s;
+}
+.mode:hover,.control:hover{transform:translateY(-2px)}
+.mode.active,.control{background:#7657ff;box-shadow:0 0 18px rgba(118,87,255,.45)}
+.score{display:flex;justify-content:center;gap:30px;margin:16px 0 10px;color:#c7c7e8}
+.score strong{color:#fff;font-size:19px}
+.status{min-height:30px;margin-bottom:14px;font-size:20px;font-weight:800}
+.board{
+  width:min(82vw,350px);height:min(82vw,350px);margin:0 auto 22px;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+}
+.cell{
+  border:0;border-radius:19px;background:rgba(255,255,255,.09);color:white;
+  font-size:clamp(44px,15vw,76px);font-weight:bold;cursor:pointer;
+  transition:transform .15s,background .2s,box-shadow .2s;
+}
+.cell:hover:not(:disabled){transform:scale(1.05);background:rgba(255,255,255,.16);
+  box-shadow:0 0 20px rgba(124,92,255,.5)}
+.cell:disabled{cursor:default}
+.x{color:#5ee7ff;text-shadow:0 0 10px #5ee7ff,0 0 25px #5ee7ff}
+.o{color:#ff6bcb;text-shadow:0 0 10px #ff6bcb,0 0 25px #ff6bcb}
+.winner{animation:winner .45s infinite alternate;background:rgba(255,255,255,.18)}
+@keyframes winner{to{transform:scale(1.08)}}
+.info{margin-top:14px;color:#8888ae;font-size:12px}
+@media(max-width:450px){.game{padding:18px}.board{gap:7px}}
+</style>
+</head>
+<body>
+<main class="game">
+  <img class="logo" src="logo.png" alt="SUPER MEGA TIC TAC TOE">
+  <p class="subtitle">⚡ LE DUEL ULTIME ⚡</p>
+
+  <div class="modes">
+    <button class="mode active" id="botMode">🤖 Contre le Bot</button>
+    <button class="mode" id="playerMode">👥 Deux joueurs</button>
+  </div>
+
+  <div class="score">
+    <div>❌ : <strong id="scoreX">0</strong></div>
+    <div>⭕ : <strong id="scoreO">0</strong></div>
+  </div>
+
+  <div id="status" class="status">Ton tour ❌</div>
+
+  <div class="board">
+    <button class="cell" data-index="0"></button>
+    <button class="cell" data-index="1"></button>
+    <button class="cell" data-index="2"></button>
+    <button class="cell" data-index="3"></button>
+    <button class="cell" data-index="4"></button>
+    <button class="cell" data-index="5"></button>
+    <button class="cell" data-index="6"></button>
+    <button class="cell" data-index="7"></button>
+    <button class="cell" data-index="8"></button>
+  </div>
+
+  <div class="buttons">
+    <button class="control" id="restart">🔄 Rejouer</button>
+    <button class="control" id="musicButton">🎵 Musique : OFF</button>
+  </div>
+
+  <p class="info">🔊 Chaque coup fait BOP ! • 🤖 Le bot peut gagner ou bloquer</p>
+</main>
+
+<script>
+const cells=document.querySelectorAll(".cell");
+const statusText=document.getElementById("status");
+const restartButton=document.getElementById("restart");
+const musicButton=document.getElementById("musicButton");
+const botMode=document.getElementById("botMode");
+const playerMode=document.getElementById("playerMode");
+const scoreXElement=document.getElementById("scoreX");
+const scoreOElement=document.getElementById("scoreO");
+
+let board=["","","","","","","","",""];
+let currentPlayer="X",gameActive=true,botIsThinking=false,vsBot=true;
+let scoreX=0,scoreO=0;
+let audioContext=null,musicPlaying=false,musicTimer=null,noteIndex=0;
+
+const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const melody=[261.63,329.63,392,329.63,293.66,349.23,440,349.23];
+
+function getAudio(){
+  if(!audioContext) audioContext=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioContext.state==="suspended") audioContext.resume();
+  return audioContext;
+}
+function playBop(){
+  const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain();
+  o.type="sine";o.frequency.setValueAtTime(180,ac.currentTime);
+  o.frequency.exponentialRampToValueAtTime(80,ac.currentTime+.12);
+  g.gain.setValueAtTime(.0001,ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(.35,ac.currentTime+.01);
+  g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+.12);
+  o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.13);
+}
+function playNote(freq){
+  const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain();
+  o.type="sine";o.frequency.value=freq;
+  g.gain.setValueAtTime(.0001,ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(.07,ac.currentTime+.03);
+  g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+.25);
+  o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.25);
+}
+function musicLoop(){
+  if(!musicPlaying)return;
+  playNote(melody[noteIndex]);noteIndex=(noteIndex+1)%melody.length;
+  musicTimer=setTimeout(musicLoop,300);
+}
+function toggleMusic(){
+  getAudio();musicPlaying=!musicPlaying;
+  if(musicPlaying){musicButton.textContent="🔊 Musique : ON";noteIndex=0;musicLoop();}
+  else{musicButton.textContent="🎵 Musique : OFF";clearTimeout(musicTimer);}
+}
+
+function makeMove(index,player){
+  board[index]=player;
+  cells[index].textContent=player==="X"?"❌":"⭕";
+  cells[index].classList.add(player==="X"?"x":"o");
+  playBop();
+  checkGame();
+}
+function handleCellClick(e){
+  if(!gameActive||botIsThinking)return;
+  if(vsBot&&currentPlayer!=="X")return;
+  const i=Number(e.target.dataset.index);
+  if(board[i]!=="")return;
+  makeMove(i,currentPlayer);
+  if(!gameActive)return;
+  if(vsBot&&currentPlayer==="O"){
+    botIsThinking=true;statusText.textContent="🤖 Le bot réfléchit...";disableBoard();
+    setTimeout(botMove,500);
+  }
+}
+function checkGame(){
+  let win=null;
+  for(const combo of wins){
+    const [a,b,c]=combo;
+    if(board[a]&&board[a]===board[b]&&board[a]===board[c]){win=combo;break;}
+  }
+  if(win){
+    gameActive=false;botIsThinking=false;
+    if(currentPlayer==="X"){
+      scoreX++;scoreXElement.textContent=scoreX;
+      statusText.textContent=vsBot?"🎉 TU AS GAGNÉ !":"🎉 ❌ GAGNE !";
+    }else{
+      scoreO++;scoreOElement.textContent=scoreO;
+      statusText.textContent=vsBot?"🤖 LE BOT A GAGNÉ !":"🎉 ⭕ GAGNE !";
+    }
+    win.forEach(i=>cells[i].classList.add("winner"));disableBoard();return;
+  }
+  if(!board.includes("")){
+    gameActive=false;botIsThinking=false;statusText.textContent="🤝 ÉGALITÉ !";
+    disableBoard();setTimeout(restartGame,1500);return;
+  }
+  currentPlayer=currentPlayer==="X"?"O":"X";
+  if(vsBot){
+    if(currentPlayer==="X"){statusText.textContent="Ton tour ❌";enableBoard();}
+    else statusText.textContent="🤖 Le bot réfléchit...";
+  }else{
+    statusText.textContent=`Tour de ${currentPlayer==="X"?"❌":"⭕"}`;enableBoard();
+  }
+}
+function findWinningMove(player){
+  for(const [a,b,c] of wins){
+    const v=[board[a],board[b],board[c]];
+    if(v.filter(x=>x===player).length===2&&v.filter(x=>x==="").length===1)
+      return board[a]===""?a:board[b]===""?b:c;
+  }
+  return -1;
+}
+function findBestMove(){
+  let m=findWinningMove("O");if(m!==-1)return m;
+  m=findWinningMove("X");if(m!==-1)return m;
+  if(board[4]==="")return 4;
+  const corners=[0,2,6,8].filter(i=>board[i]==="");
+  if(corners.length)return corners[Math.floor(Math.random()*corners.length)];
+  const free=board.map((v,i)=>v===""?i:-1).filter(i=>i!==-1);
+  return free.length?free[Math.floor(Math.random()*free.length)]:-1;
+}
+function botMove(){
+  if(!gameActive)return;
+  const m=findBestMove();if(m!==-1)makeMove(m,"O");
+  botIsThinking=false;if(gameActive)enableBoard();
+}
+function disableBoard(){cells.forEach(c=>c.disabled=true)}
+function enableBoard(){
+  cells.forEach((c,i)=>c.disabled=board[i]!==""||!gameActive||botIsThinking||(vsBot&&currentPlayer==="O"));
+}
+function restartGame(){
+  board=["","","","","","","","",""];currentPlayer="X";gameActive=true;botIsThinking=false;
+  statusText.textContent=vsBot?"Ton tour ❌":"Tour de ❌";
+  cells.forEach(c=>{c.textContent="";c.disabled=false;c.classList.remove("x","o","winner")});
+  enableBoard();
+}
+
+cells.forEach(c=>c.addEventListener("click",handleCellClick));
+restartButton.addEventListener("click",restartGame);
+musicButton.addEventListener("click",toggleMusic);
+botMode.addEventListener("click",()=>{vsBot=true;botMode.classList.add("active");playerMode.classList.remove("active");restartGame()});
+playerMode.addEventListener("click",()=>{vsBot=false;playerMode.classList.add("active");botMode.classList.remove("active");restartGame()});
+enableBoard();
+</script>
+</body>
+</html>
